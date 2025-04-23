@@ -20,6 +20,7 @@ import styles
 import asset_bundle
 
 from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5.QtCore import QTimer
 import time
 import sys
 import subprocess
@@ -40,6 +41,7 @@ import requests
 import re
 import logging
 from collections import OrderedDict
+import glob
 
 if not Development:
     import RPi.GPIO as GPIO
@@ -281,7 +283,16 @@ class MainUiClass(QtWidgets.QMainWindow, mainGUI.Ui_MainWindow):
             stream_handler.setFormatter(formatter)
             file_handler.setLevel(logging.DEBUG)
             self._logger.addHandler(file_handler)
-            self._logger.addHandler(stream_handler)
+            self._logger.addHandler(stream_handler)\
+        
+        # Call log cleanup\ *everytimme u reboot*)
+        self.cleanUpLogsIfNeeded(logDir='/var/log', maxSizeMB=10)
+
+        # Call log cleanup\ *after a time interval*
+        self.logCleanupTimer = QTimer(self)
+        self.logCleanupTimer.timeout.connect(lambda: self.cleanUpLogsIfNeeded(logDir='/home/pi/logs', maxSizeMB=10))
+        self.logCleanupTimer.start(600000)  # 10 minutes
+
         try:
             # if not Development:
                 # self.__packager = asset_bundle.AssetBundle()
@@ -480,7 +491,38 @@ class MainUiClass(QtWidgets.QMainWindow, mainGUI.Ui_MainWindow):
             self.stackedWidget.setCurrentWidget(self.homePage)
         self.isFilamentSensorInstalled()
         self.onServerConnected()
+ 
+    def cleanUpLogsIfNeeded(self, logDir='/var/log', maxSizeMB=10):
+        """
+        Deletes oldest log files in logDir if total size exceeds maxSizeMB.
+        Specifically targets kern.log and syslog.
+        """
+        try:
+            maxSizeBytes = maxSizeMB * 1024 * 1024  # Convert MB to bytes
+            logFiles = [os.path.join(logDir, log) for log in ['kern.log', 'syslog']]
+            logFiles = [f for f in logFiles if os.path.exists(f)]
+            totalSize = sum(os.path.getsize(f) for f in logFiles)
 
+            if totalSize <= maxSizeBytes:
+                if not Development:
+                    self._logger.info("Log files under {} MB. No cleanup needed.".format(maxSizeMB))
+                return
+
+            if not Development:
+                self._logger.warning("Log files exceed {} MB. Starting cleanup...".format(maxSizeMB))
+
+            for logFile in logFiles:
+                try:
+                    with open(logFile, 'w') as f:
+                        f.truncate(0)  # Clear the file content
+                    if not Development:
+                        self._logger.info("Cleared log file: {}".format(logFile))
+                except Exception as e:
+                    if not Development:
+                        self._logger.error("Could not clear {}: {}".format(logFile, e))
+        except Exception as e:
+            if not Development:
+                self._logger.error("Error in cleanUpLogsIfNeeded: {}".format(e))
 
     def setActions(self):
 
@@ -1912,7 +1954,7 @@ class MainUiClass(QtWidgets.QMainWindow, mainGUI.Ui_MainWindow):
         return False
 
     def askAndReboot(self, msg="Are you sure you want to reboot?", overlay=True):
-        if dialog.WarningYesNo(self, msg, overlay=overlay):
+        if dialog.WarningYesNo(self, msg, overlay=True):
             os.system('sudo reboot now')
             return True
         return False
@@ -1930,6 +1972,7 @@ class MainUiClass(QtWidgets.QMainWindow, mainGUI.Ui_MainWindow):
         self.QRCodeLabel.setPixmap(
             qrcode.make("http://"+ qrip, image_factory=Image).pixmap())
         self.stackedWidget.setCurrentWidget(self.QRCodePage)
+
 
 class QtWebsocket(QtCore.QThread):
     '''
