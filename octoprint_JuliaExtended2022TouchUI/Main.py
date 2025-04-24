@@ -283,14 +283,14 @@ class MainUiClass(QtWidgets.QMainWindow, mainGUI.Ui_MainWindow):
             stream_handler.setFormatter(formatter)
             file_handler.setLevel(logging.DEBUG)
             self._logger.addHandler(file_handler)
-            self._logger.addHandler(stream_handler)\
+            self._logger.addHandler(stream_handler)
         
-        # Call log cleanup\ *everytimme u reboot*)
+        # Call log cleanup at startup
         self.cleanUpLogsIfNeeded(logDir='/var/log', maxSizeMB=10)
 
-        # Call log cleanup\ *after a time interval*
+        # Schedule periodic log cleanup every 10 minutes
         self.logCleanupTimer = QTimer(self)
-        self.logCleanupTimer.timeout.connect(lambda: self.cleanUpLogsIfNeeded(logDir='/home/pi/logs', maxSizeMB=10))
+        self.logCleanupTimer.timeout.connect(self.debugLogCleanup)
         self.logCleanupTimer.start(600000)  # 10 minutes
 
         try:
@@ -364,6 +364,35 @@ class MainUiClass(QtWidgets.QMainWindow, mainGUI.Ui_MainWindow):
         self.loadingGif.setMovie(self.movie)
         self.movie.start()
 
+    def debugLogCleanup(self):
+        print("Timer triggered: Cleaning logs...")
+        self.cleanUpLogsIfNeeded(logDir='/var/log', maxSizeMB=10)
+
+    def cleanUpLogsIfNeeded(self, logDir='/var/log', maxSizeMB=10):
+        try:
+            maxSizeBytes = maxSizeMB * 1024 * 1024  # Convert MB to bytes
+            logFiles = [os.path.join(logDir, log) for log in ['kern.log', 'syslog']]
+            logFiles = [f for f in logFiles if os.path.exists(f)]
+            totalSize = sum(os.path.getsize(f) for f in logFiles)
+
+            print(f"Total log size: {totalSize} bytes")
+            print(f"Max allowed size: {maxSizeBytes} bytes")
+
+            if totalSize <= maxSizeBytes:
+                print("Log files under limit. No cleanup needed.")
+                return
+
+            print("Log files exceed limit. Starting cleanup...")
+
+            for logFile in logFiles:
+                try:
+                    with open(logFile, 'w') as f:
+                        f.truncate(0)  # Clear the file content
+                    print(f"Cleared log file: {logFile}")
+                except Exception as e:
+                    print(f"Could not clear {logFile}: {e}")
+        except Exception as e:
+            print(f"Error in cleanUpLogsIfNeeded: {e}")
 
     def safeProceed(self):
         '''
@@ -492,38 +521,6 @@ class MainUiClass(QtWidgets.QMainWindow, mainGUI.Ui_MainWindow):
         self.isFilamentSensorInstalled()
         self.onServerConnected()
  
-    def cleanUpLogsIfNeeded(self, logDir='/var/log', maxSizeMB=10):
-        """
-        Deletes oldest log files in logDir if total size exceeds maxSizeMB.
-        Specifically targets kern.log and syslog.
-        """
-        try:
-            maxSizeBytes = maxSizeMB * 1024 * 1024  # Convert MB to bytes
-            logFiles = [os.path.join(logDir, log) for log in ['kern.log', 'syslog']]
-            logFiles = [f for f in logFiles if os.path.exists(f)]
-            totalSize = sum(os.path.getsize(f) for f in logFiles)
-
-            if totalSize <= maxSizeBytes:
-                if not Development:
-                    self._logger.info("Log files under {} MB. No cleanup needed.".format(maxSizeMB))
-                return
-
-            if not Development:
-                self._logger.warning("Log files exceed {} MB. Starting cleanup...".format(maxSizeMB))
-
-            for logFile in logFiles:
-                try:
-                    with open(logFile, 'w') as f:
-                        f.truncate(0)  # Clear the file content
-                    if not Development:
-                        self._logger.info("Cleared log file: {}".format(logFile))
-                except Exception as e:
-                    if not Development:
-                        self._logger.error("Could not clear {}: {}".format(logFile, e))
-        except Exception as e:
-            if not Development:
-                self._logger.error("Error in cleanUpLogsIfNeeded: {}".format(e))
-
     def setActions(self):
 
         '''
