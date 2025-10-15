@@ -335,6 +335,22 @@ class MainUiClass(QtWidgets.QMainWindow, mainGUI.Ui_MainWindow):
 
     def setupUi(self, MainWindow):
         super(MainUiClass, self).setupUi(MainWindow)
+        
+        # Configure mainApplication to match stackedWidget size and set expanding policy
+        self.mainApplication.setGeometry(QtCore.QRect(0, 0, 480, 320))
+        self.mainApplication.setMinimumSize(QtCore.QSize(480, 320))
+        self.mainApplication.setMaximumSize(QtCore.QSize(480, 320))
+        self.mainApplication.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        
+        # Create layout for mainApplication with zero margins and spacing
+        self.mainApplicationLayout = QtWidgets.QVBoxLayout(self.mainApplication)
+        self.mainApplicationLayout.setContentsMargins(0, 0, 0, 0)
+        self.mainApplicationLayout.setSpacing(0)
+        
+        # Add stackedWidget to layout and set expanding policy
+        self.mainApplicationLayout.addWidget(self.stackedWidget)
+        self.stackedWidget.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        
         font = QtGui.QFont()
         font.setFamily(_fromUtf8("Gotham"))
         font.setPointSize(15)
